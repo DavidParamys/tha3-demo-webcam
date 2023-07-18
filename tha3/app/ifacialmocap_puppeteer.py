@@ -108,6 +108,13 @@ class MainFrame(wx.Frame):
             if out_socket is not None:
                 out_socket.close()
 
+    def read_webcam_pose(self):
+        # TODO: Not finish yet
+        if not self.animation_timer.IsRunning():
+            return self.ifacialmocap_pose
+        return self.ifacialmocap_pose
+
+
     def read_ifacialmocap_pose(self):
         if not self.animation_timer.IsRunning():
             return self.ifacialmocap_pose
