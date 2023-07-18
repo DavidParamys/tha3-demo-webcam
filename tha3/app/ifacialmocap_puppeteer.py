@@ -228,10 +228,13 @@ class MainFrame(wx.Frame):
     def create_input_selection_panel(self, parent):
         self.input_panel = wx.Panel(parent, style=wx.RAISED_BORDER)
         self.input_panel_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.input_panel.SetSizer(self.input_panel_sizer)
+        self.input_panel.SetAutoLayout(1)
+
         choices_selection = ['iFacial Mocap', 'Webcam']
         self.input_choice = wx.Choice(self.input_panel, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choices_selection, 0)
         self.input_choice.SetSelection( 0 )
-        self.input_panel_sizer.Add( self.input_choice, 0, wx.ALL, 5 )
+        self.input_panel_sizer.Add(self.input_choice, wx.SizerFlags(1).Expand().Border(wx.ALL, 3))
 
     def create_connection_panel(self, parent):
         self.connection_panel = wx.Panel(parent, style=wx.RAISED_BORDER)
