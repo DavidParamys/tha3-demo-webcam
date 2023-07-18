@@ -4,6 +4,7 @@ import socket
 import sys
 import threading
 import time
+import cv2
 from typing import Optional
 
 sys.path.append(os.getcwd())
@@ -52,7 +53,6 @@ class MainFrame(wx.Frame):
         self.poser = poser
         self.device = device
 
-
         self.ifacialmocap_pose = create_default_ifacialmocap_pose()
         self.source_image_bitmap = wx.Bitmap(self.poser.get_image_size(), self.poser.get_image_size())
         self.result_image_bitmap = wx.Bitmap(self.poser.get_image_size(), self.poser.get_image_size())
@@ -62,6 +62,9 @@ class MainFrame(wx.Frame):
         self.fps_statistics = FpsStatistics()
         self.last_update_time = None
 
+        # Webcam usage
+        self.cap=None 
+
         self.create_receiving_socket()
         self.create_ui()
         self.create_timers()
@@ -69,6 +72,7 @@ class MainFrame(wx.Frame):
 
         self.update_source_image_bitmap()
         self.update_result_image_bitmap()
+
 
     def create_receiving_socket(self):
         self.receiving_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -93,6 +97,14 @@ class MainFrame(wx.Frame):
         self.Destroy()
         event.Skip()
 
+    def select_input_method(self, event: wx.Event):
+        selected_option = self.input_choice.GetStringSelection()
+        print(f'[DEBUG] Selected option: {selected_option}')
+        if selected_option == 'iFacial Mocap':
+            print(f'[DEBUG] Showing iFacial Mocap panel')
+        else:
+            print(f'[DEBUG] Showing webcam panels')
+
     def on_start_capture(self, event: wx.Event):
         capture_device_ip_address = self.capture_device_ip_text_ctrl.GetValue()
         out_socket = None
@@ -107,13 +119,27 @@ class MainFrame(wx.Frame):
         finally:
             if out_socket is not None:
                 out_socket.close()
+    
+    def on_start_webcam(self, event: wx.Event):
+        self.cap = cv2.VideoCapture(0)
+        ret, _ = self.cap.read()
+        if ret:
+            self.frame=None
+        else:
+            message_dialog = wx.MessageDialog(self, str(e), "Error!", wx.OK)
+            message_dialog.ShowModal()
+            message_dialog.Destroy()
+        if self.cap is not None:
+            cv2.destroyAllWindows()
+            self.cap.release()
+            self.cap = None
+
 
     def read_webcam_pose(self):
         # TODO: Not finish yet
         if not self.animation_timer.IsRunning():
             return self.ifacialmocap_pose
         return self.ifacialmocap_pose
-
 
     def read_ifacialmocap_pose(self):
         if not self.animation_timer.IsRunning():
@@ -235,6 +261,15 @@ class MainFrame(wx.Frame):
         self.input_choice = wx.Choice(self.input_panel, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choices_selection, 0)
         self.input_choice.SetSelection( 0 )
         self.input_panel_sizer.Add(self.input_choice, wx.SizerFlags(1).Expand().Border(wx.ALL, 3))
+        self.input_choice.Bind(wx.EVT_CHOICE, self.select_input_method)    
+    
+    def create_camera_panel(self, parent):
+        self.webcam_panel = wx.Panel(parent, style=wx.RAISED_BORDER)
+        self.webcam_panel_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.webcam_panel.SetSizer(self.capture_panel_sizer)
+        self.start_webcam_button = wx.Button(self.connection_panel, label="START WEBCAM!")
+        self.webcam_panel.Add(self.start_webcam_button, wx.SizerFlags(0).FixedMinSize().Border(wx.ALL, 3))
+        self.start_webcam_button.Bind(wx.EVT_BUTTON, self.on_start_webcam)
 
     def create_connection_panel(self, parent):
         self.connection_panel = wx.Panel(parent, style=wx.RAISED_BORDER)
