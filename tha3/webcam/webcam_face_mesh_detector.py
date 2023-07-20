@@ -112,9 +112,12 @@ class FaceMeshDetector(object):
                         output[RIGHT_EYE_BONE_Z] = lm.z
                 """
                 # calculate Bone
-                face_bone_ids = [33, 263, 1, 61, 291, 199]
-                left_bone_ids = [33, 246, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7]
-                right_bone_ids = [263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249]
+                face_bone_ids = [10, 162, 389, 136, 365, 152]
+                left_bone_ids = [33, 160, 158, 133, 153, 144]
+                right_bone_ids = [163, 387, 385, 362, 380, 373]
+                face_bone_ids.sort()
+                left_bone_ids.sort()
+                right_bone_ids.sort()
                 face_3d = []
                 face_2d = []
                 left_eye_3d = []
@@ -150,15 +153,15 @@ class FaceMeshDetector(object):
                 right_x, right_y, right_z = self.calculate_bone(right_eye_2d, right_eye_3d, frame.shape)
                 
                 # Save to output dict
-                output[HEAD_BONE_X] = np.round(x/10, 2)
-                output[HEAD_BONE_Y] = np.round(y/10, 2)
-                output[HEAD_BONE_Z] = -np.round(z/10, 2)
-                output[LEFT_EYE_BONE_X] = np.round(left_x/10, 2)
-                output[LEFT_EYE_BONE_Y] = np.round(left_y/10, 2)
-                output[LEFT_EYE_BONE_Z] = np.round(left_z/10, 2)
-                output[RIGHT_EYE_BONE_X] = np.round(right_x/10, 2)
-                output[RIGHT_EYE_BONE_Y] = np.round(right_y/10, 2)
-                output[RIGHT_EYE_BONE_Z] = np.round(right_z/10, 2)
+                output[HEAD_BONE_X] = np.round(x/100, 2)
+                output[HEAD_BONE_Y] = np.round(y/100, 2)
+                output[HEAD_BONE_Z] = -np.round(z/100, 2)
+                output[LEFT_EYE_BONE_X] = abs(np.round(left_x/100, 2))
+                output[LEFT_EYE_BONE_Y] = np.round(left_y/100, 2)
+                output[LEFT_EYE_BONE_Z] = np.round(left_z/100, 2)
+                output[RIGHT_EYE_BONE_X] = abs(np.round(right_x/100, 2))
+                output[RIGHT_EYE_BONE_Y] = np.round(right_y/100, 2)
+                output[RIGHT_EYE_BONE_Z] = np.round(right_z/100, 2)
                 if y < -10:
                     text = "Looking Left"
                 elif y > 10:
