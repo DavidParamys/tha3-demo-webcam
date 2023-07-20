@@ -5,11 +5,12 @@ import sys
 import threading
 import time
 import cv2
+import matplotlib.pyplot as plt
 from typing import Optional
 
 sys.path.append(os.getcwd())
 
-from tha3.mocap.ifacialmocap_pose import create_default_ifacialmocap_pose
+from tha3.mocap.ifacialmocap_pose import create_default_ifacialmocap_pose, print_ifacialmocap_pose
 from tha3.mocap.ifacialmocap_v2 import IFACIALMOCAP_PORT, IFACIALMOCAP_START_STRING, parse_ifacialmocap_v2_pose, \
     parse_ifacialmocap_v1_pose
 from tha3.poser.modes.load_poser import load_poser
@@ -22,6 +23,7 @@ from tha3.mocap.ifacialmocap_constants import *
 from tha3.mocap.ifacialmocap_pose_converter import IFacialMocapPoseConverter
 from tha3.util import torch_linear_to_srgb, resize_PIL_image, extract_PIL_image_from_filelike, \
     extract_pytorch_image_from_PIL_image
+from tha3.webcam.webcam_face_mesh_detector import FaceMeshDetector
 
 
 def convert_linear_to_srgb(image: torch.Tensor) -> torch.Tensor:
@@ -63,15 +65,21 @@ class MainFrame(wx.Frame):
         self.last_update_time = None
 
         # Webcam usage
-        self.cap=None 
+        self.is_debug = True
+        self.cap_process = None
+        self.faceMeshDetector = None
+        self.is_stop = False
 
         self.create_receiving_socket()
         self.create_ui()
         self.create_timers()
         self.Bind(wx.EVT_CLOSE, self.on_close)
 
+
         self.update_source_image_bitmap()
         self.update_result_image_bitmap()
+
+        self.webcam_panel.Show(False)
 
 
     def create_receiving_socket(self):
@@ -99,11 +107,15 @@ class MainFrame(wx.Frame):
 
     def select_input_method(self, event: wx.Event):
         selected_option = self.input_choice.GetStringSelection()
-        print(f'[DEBUG] Selected option: {selected_option}')
-        if selected_option == 'iFacial Mocap':
-            print(f'[DEBUG] Showing iFacial Mocap panel')
+        # print(f'selected_option: {selected_option}, self.user_input_method: {self.user_input_method}')
+        if selected_option == self.choices_options[0]:
+            self.connection_panel.Show(True)
+            self.webcam_panel.Show(False)
+            self.user_input_method = selected_option
         else:
-            print(f'[DEBUG] Showing webcam panels')
+            self.webcam_panel.Show(True)
+            self.connection_panel.Show(False)
+            self.user_input_method = selected_option
 
     def on_start_capture(self, event: wx.Event):
         capture_device_ip_address = self.capture_device_ip_text_ctrl.GetValue()
@@ -121,25 +133,33 @@ class MainFrame(wx.Frame):
                 out_socket.close()
     
     def on_start_webcam(self, event: wx.Event):
-        self.cap = cv2.VideoCapture(0)
+        if self.cap_process is None:
+            print(f"Starting webcam capture process")
+            # Create and start the process only if it's not running
+            self.cap_process = threading.Thread(target=self.webcam_video_capture)
+            self.cap_process.start()
+
+    def webcam_video_capture(self):
+        # Get the video capture target 
+        target_webcam = self.webcam_index_text_ctrl.GetValue()
+        if target_webcam.isdigit():
+            target_webcam = int(target_webcam)
+        print(f" webcam_video_capture: target_webcam: {target_webcam}")
+        # Declaration
+        self.cap = cv2.VideoCapture(target_webcam)
+        if self.faceMeshDetector is None:
+            self.faceMeshDetector =  FaceMeshDetector()
+
+        # Start detect face feature
         ret, _ = self.cap.read()
-        if ret:
-            self.frame=None
-        else:
-            message_dialog = wx.MessageDialog(self, str(e), "Error!", wx.OK)
-            message_dialog.ShowModal()
-            message_dialog.Destroy()
-        if self.cap is not None:
-            cv2.destroyAllWindows()
-            self.cap.release()
-            self.cap = None
-
-
-    def read_webcam_pose(self):
-        # TODO: Not finish yet
-        if not self.animation_timer.IsRunning():
-            return self.ifacialmocap_pose
-        return self.ifacialmocap_pose
+        while ret:
+            ret, frame = self.cap.read()
+            frame, self.ifacialmocap_pose = self.faceMeshDetector. findFaceMesh(frame, self.ifacialmocap_pose)
+            # print_ifacialmocap_pose(self.ifacialmocap_pose)
+            time.sleep(0.003)
+        self.cap.release()
+        self.cap = None
+        self.faceMeshDetector = None
 
     def read_ifacialmocap_pose(self):
         if not self.animation_timer.IsRunning():
@@ -240,8 +260,12 @@ class MainFrame(wx.Frame):
         self.create_input_selection_panel(self)
         self.main_sizer.Add(self.input_panel, wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
 
-        self.create_connection_panel(self)
-        self.main_sizer.Add(self.connection_panel, wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
+        self.create_input_detail_panel(self)
+        self.create_camera_panel(self.input_detail_panel)
+        self.create_connection_panel(self.input_detail_panel)
+        self.input_detail_panel_sizer.Add(self.webcam_panel, wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
+        self.input_detail_panel_sizer.Add(self.connection_panel, wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
+        self.main_sizer.Add(self.input_detail_panel, wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
 
         self.create_animation_panel(self)
         self.main_sizer.Add(self.animation_panel, wx.SizerFlags(0).Expand().Border(wx.ALL, 5))
@@ -257,22 +281,32 @@ class MainFrame(wx.Frame):
         self.input_panel.SetSizer(self.input_panel_sizer)
         self.input_panel.SetAutoLayout(1)
 
-        choices_selection = ['iFacial Mocap', 'Webcam']
-        self.input_choice = wx.Choice(self.input_panel, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, choices_selection, 0)
+        self.choices_options = ['iFacial Mocap', 'Webcam']
+        init_select_index = 0
+        self.user_input_method = self.choices_options[init_select_index]
+        self.input_choice = wx.Choice(self.input_panel, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, self.choices_options, init_select_index)
         self.input_choice.SetSelection( 0 )
         self.input_panel_sizer.Add(self.input_choice, wx.SizerFlags(1).Expand().Border(wx.ALL, 3))
-        self.input_choice.Bind(wx.EVT_CHOICE, self.select_input_method)    
+        self.input_choice.Bind(wx.EVT_CHOICE, self.select_input_method)
     
     def create_camera_panel(self, parent):
-        self.webcam_panel = wx.Panel(parent, style=wx.RAISED_BORDER)
+        self.webcam_panel = wx.Panel(parent, style=wx.SIMPLE_BORDER)
         self.webcam_panel_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.webcam_panel.SetSizer(self.capture_panel_sizer)
-        self.start_webcam_button = wx.Button(self.connection_panel, label="START WEBCAM!")
-        self.webcam_panel.Add(self.start_webcam_button, wx.SizerFlags(0).FixedMinSize().Border(wx.ALL, 3))
+        self.webcam_panel.SetSizer(self.webcam_panel_sizer)
+
+
+        webcam_index_text = wx.StaticText(self.webcam_panel, label="Webcam index(default is `0`):", style=wx.ALIGN_RIGHT)
+        self.webcam_panel_sizer.Add(webcam_index_text, wx.SizerFlags(0).FixedMinSize().Border(wx.ALL, 3))
+
+        self.webcam_index_text_ctrl = wx.TextCtrl(self.webcam_panel, value="0")
+        self.webcam_panel_sizer.Add(self.webcam_index_text_ctrl, wx.SizerFlags(1).Expand().Border(wx.ALL, 3))
+
+        self.start_webcam_button = wx.Button(self.webcam_panel, label="START WEBCAM!")
+        self.webcam_panel_sizer.Add(self.start_webcam_button, wx.SizerFlags(0).FixedMinSize().Border(wx.ALL, 3))
         self.start_webcam_button.Bind(wx.EVT_BUTTON, self.on_start_webcam)
 
     def create_connection_panel(self, parent):
-        self.connection_panel = wx.Panel(parent, style=wx.RAISED_BORDER)
+        self.connection_panel = wx.Panel(parent, style=wx.SIMPLE_BORDER)
         self.connection_panel_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.connection_panel.SetSizer(self.connection_panel_sizer)
         self.connection_panel.SetAutoLayout(1)
@@ -286,6 +320,11 @@ class MainFrame(wx.Frame):
         self.start_capture_button = wx.Button(self.connection_panel, label="START CAPTURE!")
         self.connection_panel_sizer.Add(self.start_capture_button, wx.SizerFlags(0).FixedMinSize().Border(wx.ALL, 3))
         self.start_capture_button.Bind(wx.EVT_BUTTON, self.on_start_capture)
+
+    def create_input_detail_panel(self, parent):
+        self.input_detail_panel = wx.Panel(parent, style=wx.RAISED_BORDER)
+        self.input_detail_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.input_detail_panel.SetSizer(self.input_detail_panel_sizer)
 
     def create_capture_panel(self, parent):
         self.capture_panel = wx.Panel(parent, style=wx.RAISED_BORDER)
@@ -364,7 +403,10 @@ class MainFrame(wx.Frame):
         wx.BufferedPaintDC(self.result_image_panel, self.result_image_bitmap)
 
     def update_result_image_bitmap(self, event: Optional[wx.Event] = None):
-        ifacialmocap_pose = self.read_ifacialmocap_pose()
+        if self.user_input_method == self.choices_options[0]:
+            ifacialmocap_pose = self.read_ifacialmocap_pose()
+        else:
+            ifacialmocap_pose = self.ifacialmocap_pose.copy()
         current_pose = self.pose_converter.convert(ifacialmocap_pose)
         if self.last_pose is not None and self.last_pose == current_pose:
             return
