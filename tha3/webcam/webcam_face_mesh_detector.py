@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import mediapipe as mp
 import time
+import math
 
 RIGHT_EYE_BONE_X = "rightEyeBoneX"
 RIGHT_EYE_BONE_Y = "rightEyeBoneY"
@@ -118,6 +119,8 @@ class FaceMeshDetector(object):
                 face_bone_ids.sort()
                 left_bone_ids.sort()
                 right_bone_ids.sort()
+                nose_2d = []
+                nose_3d = []
                 face_3d = []
                 face_2d = []
                 left_eye_3d = []
@@ -148,20 +151,21 @@ class FaceMeshDetector(object):
                         right_eye_3d.append([x, y, lm.z])
 
                 # Calculate 
-                x, y, z = self.calculate_bone(face_2d, face_3d, frame.shape)
-                left_x, left_y, left_z = self.calculate_bone(left_eye_2d, left_eye_3d, frame.shape)
-                right_x, right_y, right_z = self.calculate_bone(right_eye_2d, right_eye_3d, frame.shape)
+                components= self.calculate_bone(face_2d, face_3d, frame.shape)
+                left_components = self.calculate_bone(left_eye_2d, left_eye_3d, frame.shape)
+                right_components = self.calculate_bone(right_eye_2d, right_eye_3d, frame.shape)
                 
                 # Save to output dict
-                output[HEAD_BONE_X] = np.round(x/100, 2)
-                output[HEAD_BONE_Y] = np.round(y/100, 2)
-                output[HEAD_BONE_Z] = -np.round(z/100, 2)
-                output[LEFT_EYE_BONE_X] = abs(np.round(left_x/100, 2))
-                output[LEFT_EYE_BONE_Y] = np.round(left_y/100, 2)
-                output[LEFT_EYE_BONE_Z] = np.round(left_z/100, 2)
-                output[RIGHT_EYE_BONE_X] = abs(np.round(right_x/100, 2))
-                output[RIGHT_EYE_BONE_Y] = np.round(right_y/100, 2)
-                output[RIGHT_EYE_BONE_Z] = np.round(right_z/100, 2)
+                float(components[0]) * math.pi / 180
+                output[HEAD_BONE_X] = float(components[0]) * math.pi / 180
+                output[HEAD_BONE_Y] = float(components[1]) * math.pi / 180
+                output[HEAD_BONE_Z] = float(components[2]) * math.pi / 180
+                output[RIGHT_EYE_BONE_X] = float(right_components[0]) * math.pi / 180
+                output[RIGHT_EYE_BONE_Y] = float(right_components[1]) * math.pi / 180
+                output[RIGHT_EYE_BONE_Z] = float(right_components[2]) * math.pi / 180
+                output[LEFT_EYE_BONE_X] = float(left_components[0]) * math.pi / 180
+                output[LEFT_EYE_BONE_Y] = float(left_components[1]) * math.pi / 180
+                output[LEFT_EYE_BONE_Z] = float(left_components[2]) * math.pi / 180
                 if y < -10:
                     text = "Looking Left"
                 elif y > 10:
@@ -176,11 +180,11 @@ class FaceMeshDetector(object):
                 # Display the nose direction
                 # nose_3d_projection, jacobian = cv2.projectPoints(nose_3d, rot_vec, trans_vec, cam_matrix, dist_matrix)
 
-
                 if isDraw:
-                    p1 = ((int(nose_2d[0]), int(nose_2d[1])))
-                    p2 = ((int(nose_2d[0] + y * 10), int(nose_2d[1] - x * 10)))
-                    cv2.line(frame, p1, p2, (255,0,0), 3)
+                    if nose_2d:
+                        p1 = ((int(nose_2d[0]), int(nose_2d[1])))
+                        p2 = ((int(nose_2d[0] + y * 10), int(nose_2d[1] - x * 10)))
+                        cv2.line(frame, p1, p2, (255,0,0), 3)
                     cv2.putText(frame, text, (20, 50),  cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1)
                     cv2.putText(frame, f"x:{np.round(x, 2):.2f}", (iw -100, 50),  cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 1)
                     cv2.putText(frame, f"y:{np.round(y, 2):.2f}", (iw -100, 100),  cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 1)
@@ -212,12 +216,12 @@ class FaceMeshDetector(object):
         # Get angles 
         angles, mtxR, mtxQ, Qx, Qy, Qz = cv2.RQDecomp3x3(rmat)
 
-        # Get the y roation degree
+        # Get the roation degree
         x = angles[0] * 360
         y = angles[1] * 360
         z = angles[2] * 360
 
-        return x, y, z
+        return [x, y, z]
 
 
 
@@ -239,7 +243,8 @@ if __name__ == '__main__':
         # Detect
         frame, faceLmsList = detector.findFaceMesh(frame=frame,
                                                    output=output,
-                                                   isDraw=True)
+                                                   isDraw=True,
+                                                   isShowText=True)
 
         # Calculate FPS
         cTime = time.time()
