@@ -61,7 +61,7 @@ class FaceMeshDetector(object):
                                                  min_tracking_confidence=0.5)
         self.drawSpec = self.mpDraw.DrawingSpec(thickness=1, circle_radius=1)
 
-    def findFaceMesh(self, frame, output, isDraw=False, isResize=False, isShowText=False):
+    def findFaceMesh(self, frame, output, calibrations, isDraw=False, isResize=False, isShowText=False):
         if isResize:
             frame = cv2.resize(frame, RESIZE_SOLUATION)
 
@@ -128,7 +128,7 @@ class FaceMeshDetector(object):
                 right_eye_3d = []
                 right_eye_2d = []
                 for id, lm in enumerate(faceLms.landmark):
-                    x, y = int(lm.x * iw), int (lm.y * ih)
+                    x, y, z = int(lm.x * iw), int (lm.y * ih), lm.z * 1
                     # DEBUG: Draw Points on frame
                     if isShowText:                       
                         if id in face_bone_ids:
@@ -156,10 +156,9 @@ class FaceMeshDetector(object):
                 right_components = self.calculate_bone(right_eye_2d, right_eye_3d, frame.shape)
                 
                 # Save to output dict
-                float(components[0]) * math.pi / 180
-                output[HEAD_BONE_X] = float(components[0]) * math.pi / 180
-                output[HEAD_BONE_Y] = float(components[1]) * math.pi / 180
-                output[HEAD_BONE_Z] = float(components[2]) * math.pi / 180
+                output[HEAD_BONE_X] = float(-components[0]) * math.pi / 180
+                output[HEAD_BONE_Y] = float(-components[1]) * math.pi / 180
+                output[HEAD_BONE_Z] = float(-components[2]) * math.pi / 180
                 output[RIGHT_EYE_BONE_X] = float(right_components[0]) * math.pi / 180
                 output[RIGHT_EYE_BONE_Y] = float(right_components[1]) * math.pi / 180
                 output[RIGHT_EYE_BONE_Z] = float(right_components[2]) * math.pi / 180
@@ -192,6 +191,9 @@ class FaceMeshDetector(object):
             output[HEAD_BONE_QUAT] = [0.0, 0.0, 0.0, 1.0]
             output[LEFT_EYE_BONE_QUAT] = [0.0, 0.0, 0.0, 1.0]
             output[RIGHT_EYE_BONE_QUAT] = [0.0, 0.0, 0.0, 1.0]
+
+            output = self.calibrate_output(output, calibrations)
+
         return frame, output
     
     def calculate_bone(self, list_2d:list, list_3d:list, frame_shape):
@@ -222,7 +224,20 @@ class FaceMeshDetector(object):
         z = angles[2] * 360
 
         return [x, y, z]
-
+    
+    def calibrate_output(self, output, calibrations):
+        if calibrations is not None:
+            output[HEAD_BONE_X] -= calibrations[HEAD_BONE_X]
+            output[HEAD_BONE_Y] -= calibrations[HEAD_BONE_Y]
+            output[HEAD_BONE_Z] -= calibrations[HEAD_BONE_Z]
+            output[RIGHT_EYE_BONE_X] -= calibrations[RIGHT_EYE_BONE_X]
+            output[RIGHT_EYE_BONE_Y] -= calibrations[RIGHT_EYE_BONE_Y]
+            output[RIGHT_EYE_BONE_Z] -= calibrations[RIGHT_EYE_BONE_Z]
+            output[LEFT_EYE_BONE_X] -= calibrations[LEFT_EYE_BONE_X]
+            output[LEFT_EYE_BONE_Y] -= calibrations[LEFT_EYE_BONE_Y]
+            output[LEFT_EYE_BONE_Z] -= calibrations[LEFT_EYE_BONE_Z]
+        
+        return output
 
 
 if __name__ == '__main__':

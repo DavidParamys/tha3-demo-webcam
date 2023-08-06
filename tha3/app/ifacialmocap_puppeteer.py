@@ -56,6 +56,7 @@ class MainFrame(wx.Frame):
         self.device = device
 
         self.ifacialmocap_pose = create_default_ifacialmocap_pose()
+        self.calibration_pose = None
         self.source_image_bitmap = wx.Bitmap(self.poser.get_image_size(), self.poser.get_image_size())
         self.result_image_bitmap = wx.Bitmap(self.poser.get_image_size(), self.poser.get_image_size())
         self.wx_source_image = None
@@ -138,7 +139,10 @@ class MainFrame(wx.Frame):
             # Create and start the process only if it's not running
             self.cap_process = threading.Thread(target=self.webcam_video_capture)
             self.cap_process.start()
-
+    
+    def on_start_calibrate(self, event: wx.Event):
+        self.calibration_pose = self.ifacialmocap_pose.copy()
+            
     def webcam_video_capture(self):
         # Get the video capture target 
         target_webcam = self.webcam_index_text_ctrl.GetValue()
@@ -154,7 +158,7 @@ class MainFrame(wx.Frame):
         ret, _ = self.cap.read()
         while ret:
             ret, frame = self.cap.read()
-            frame, self.ifacialmocap_pose = self.faceMeshDetector. findFaceMesh(frame, self.ifacialmocap_pose)
+            frame, self.ifacialmocap_pose = self.faceMeshDetector. findFaceMesh(frame, self.ifacialmocap_pose, self.calibration_pose)
             # print_ifacialmocap_pose(self.ifacialmocap_pose)
             time.sleep(0.003)
         self.cap.release()
@@ -304,6 +308,10 @@ class MainFrame(wx.Frame):
         self.start_webcam_button = wx.Button(self.webcam_panel, label="START WEBCAM!")
         self.webcam_panel_sizer.Add(self.start_webcam_button, wx.SizerFlags(0).FixedMinSize().Border(wx.ALL, 3))
         self.start_webcam_button.Bind(wx.EVT_BUTTON, self.on_start_webcam)
+
+        self.start_webcam_button = wx.Button(self.webcam_panel, label="Calibrate")
+        self.webcam_panel_sizer.Add(self.start_webcam_button, wx.SizerFlags(0).FixedMinSize().Border(wx.ALL, 3))
+        self.start_webcam_button.Bind(wx.EVT_BUTTON, self.on_start_calibrate)
 
     def create_connection_panel(self, parent):
         self.connection_panel = wx.Panel(parent, style=wx.SIMPLE_BORDER)
