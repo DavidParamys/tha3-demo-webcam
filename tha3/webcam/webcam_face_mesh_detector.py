@@ -5,26 +5,16 @@ import mediapipe as mp
 import time
 import math
 
-RIGHT_EYE_BONE_X = "rightEyeBoneX"
-RIGHT_EYE_BONE_Y = "rightEyeBoneY"
-RIGHT_EYE_BONE_Z = "rightEyeBoneZ"
+from webcam_constants import *
 
-LEFT_EYE_BONE_X = "leftEyeBoneX"
-LEFT_EYE_BONE_Y = "leftEyeBoneY"
-LEFT_EYE_BONE_Z = "leftEyeBoneZ"
-
-HEAD_BONE_X = "headBoneX"
-HEAD_BONE_Y = "headBoneY"
-HEAD_BONE_Z = "headBoneZ"
-
-RIGHT_EYE_BONE_QUAT = "rightEyeBoneQuat"
-LEFT_EYE_BONE_QUAT = "leftEyeBoneQuat"
-HEAD_BONE_QUAT = "headBoneQuat"
 
 RESIZE_SOLUATION = (320, 320)
 
 def create_default_ifacialmocap_pose():
     data = {}
+
+    for blendshape_name in BLENDSHAPE_NAMES:
+        data[blendshape_name] = 0.0
 
     data[HEAD_BONE_X] = 0.0
     data[HEAD_BONE_Y] = 0.0
@@ -65,7 +55,7 @@ class FaceMeshDetector(object):
         if isResize:
             frame = cv2.resize(frame, RESIZE_SOLUATION)
 
-        # Face tracking
+        # Face tracking 
         frameRGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.faceMesh.process(frameRGB)
         ih, iw, ic = frame.shape
@@ -150,6 +140,7 @@ class FaceMeshDetector(object):
                         right_eye_2d.append([x ,y])
                         right_eye_3d.append([x, y, lm.z])
 
+
                 # Calculate 
                 components= self.calculate_bone(face_2d, face_3d, frame.shape)
                 left_components = self.calculate_bone(left_eye_2d, left_eye_3d, frame.shape)
@@ -178,6 +169,8 @@ class FaceMeshDetector(object):
 
                 # Display the nose direction
                 # nose_3d_projection, jacobian = cv2.projectPoints(nose_3d, rot_vec, trans_vec, cam_matrix, dist_matrix)
+
+                output = self.calculate_blendshape(output, frame.shape)
 
                 if isDraw:
                     if nose_2d:
@@ -236,8 +229,21 @@ class FaceMeshDetector(object):
             output[LEFT_EYE_BONE_X] -= calibrations[LEFT_EYE_BONE_X]
             output[LEFT_EYE_BONE_Y] -= calibrations[LEFT_EYE_BONE_Y]
             output[LEFT_EYE_BONE_Z] -= calibrations[LEFT_EYE_BONE_Z]
+
+        for blendshape_name in BLENDSHAPE_NAMES:
+            if blendshape_name in output:
+                output[blendshape_name] -= calibrations[blendshape_name]
         
         return output
+    
+    def calculate_blendshape(self, output: list, frame_size):
+        ih, iw, _ = frame_size
+
+        # Left 
+        output[EYE_LOOK_IN_LEFT] = 0
+
+        return output
+            
 
 
 if __name__ == '__main__':
@@ -249,6 +255,7 @@ if __name__ == '__main__':
 
     ret, _ = cap.read()
     output = create_default_ifacialmocap_pose()
+    calibrate = output.copy()
     while ret:
         # Get frame
         ret, frame = cap.read()
@@ -258,6 +265,7 @@ if __name__ == '__main__':
         # Detect
         frame, faceLmsList = detector.findFaceMesh(frame=frame,
                                                    output=output,
+                                                   calibrations=calibrate,
                                                    isDraw=True,
                                                    isShowText=True)
 
